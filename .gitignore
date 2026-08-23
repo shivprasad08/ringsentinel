@@ -1,0 +1,15 @@
+# Generated pipeline artifacts — regenerable, not source
+data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editor / OS
+.vscode/
+.DS_Store
+
+# Env files (if you add API keys, DB URLs, etc. later)
+.env
