@@ -48,7 +48,7 @@ uvicorn app.main:app --reload --port 8000
 
 Or run a single stage while iterating: `python -m pipeline.gbm_scorer`.
 
-## Key design decisions (for the pitch / Q&A)
+## Key design decisions 
 
 - **Held-out evaluation discipline**: `labels_HELD_OUT.csv` is loaded
   ONLY in `gbm_scorer.py` (to train) and `audit_layer.py` (to compute
