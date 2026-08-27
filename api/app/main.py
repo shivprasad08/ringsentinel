@@ -35,8 +35,9 @@ import json
 import os
 import pickle
 from collections import defaultdict
+from datetime import datetime, timezone
 from itertools import combinations
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException
@@ -109,14 +110,38 @@ def load_artifacts():
     # NOTE: labels_HELD_OUT.csv is deliberately never loaded here. The
     # serving layer has no access to ground truth — same discipline as
     # every detection stage in the pipeline.
+    
+    _state["decisions_by_cluster"] = defaultdict(list)
+    decisions_file = f"{DATA_DIR}/decisions.jsonl"
+    if os.path.exists(decisions_file):
+        with open(decisions_file) as f:
+            for line in f:
+                d = json.loads(line)
+                _state["decisions_by_cluster"][d["cluster_id"]].append(d)
+                
     print(f"RingSentinel API ready. {len(audit_records)} flagged clusters loaded from {DATA_DIR}/.")
 
 
 # ------------------------------------------------------------------
 # Request/response models
 # ------------------------------------------------------------------
+def _validate_threshold(value: float) -> float:
+    """Reject decision_threshold outside [0.0, 1.0] with a 422."""
+    if not (0.0 <= value <= 1.0):
+        raise HTTPException(
+            status_code=422,
+            detail=f"decision_threshold must be between 0.0 and 1.0, got {value}"
+        )
+    return value
+
+
 class ScoreRingRequest(BaseModel):
     account_ids: List[str] = Field(..., min_items=2, description="Candidate group of account IDs to score")
+    decision_threshold: Optional[float] = Field(
+        None,
+        description="Risk score threshold for FLAGGED_FOR_HUMAN_REVIEW vs NOT_FLAGGED. "
+                    "Defaults to server-side RISK_THRESHOLD if omitted. Must be in [0.0, 1.0]."
+    )
 
 
 class RingSummary(BaseModel):
@@ -134,6 +159,11 @@ class ScoreRingResponse(BaseModel):
     shared_entity_evidence: list
     anomalous_features: list
     note: Optional[str] = None
+
+
+class DecisionRequest(BaseModel):
+    decision: str = Field(..., description="Must be confirmed_fraud, false_positive, or needs_more_info")
+    reviewer_note: str = ""
 
 
 # ------------------------------------------------------------------
@@ -227,11 +257,35 @@ def health():
 
 
 @app.get("/rings", response_model=List[RingSummary])
-def list_rings(limit: int = 50, min_risk_score: float = 0.0):
+def list_rings(
+    limit: int = 50,
+    min_risk_score: float = 0.0,
+    decision_threshold: Optional[float] = None,
+):
+    """List flagged clusters.
+
+    min_risk_score: display filter — hides cases below this score from
+        the response entirely (cosmetic, does not change action).
+    decision_threshold: overrides the server-side RISK_THRESHOLD for
+        deciding action per-cluster in this response. Must be [0.0, 1.0].
+    """
+    threshold = RISK_THRESHOLD
+    if decision_threshold is not None:
+        threshold = _validate_threshold(decision_threshold)
+
     records = [r for r in _state["audit_list"] if r["risk_score"] >= min_risk_score]
     records = sorted(records, key=lambda r: r["risk_score"], reverse=True)[:limit]
-    return [RingSummary(cluster_id=r["cluster_id"], risk_score=r["risk_score"],
-                         cluster_size=r["cluster_size"], action=r["action"]) for r in records]
+
+    out = []
+    for r in records:
+        action = "FLAGGED_FOR_HUMAN_REVIEW" if r["risk_score"] >= threshold else "NOT_FLAGGED"
+        out.append(RingSummary(
+            cluster_id=r["cluster_id"],
+            risk_score=r["risk_score"],
+            cluster_size=r["cluster_size"],
+            action=action,
+        ))
+    return out
 
 
 @app.get("/audit/{cluster_id}")
@@ -244,11 +298,15 @@ def get_audit(cluster_id: str):
 
 @app.post("/score-ring", response_model=ScoreRingResponse)
 def score_ring(req: ScoreRingRequest):
+    threshold = RISK_THRESHOLD
+    if req.decision_threshold is not None:
+        threshold = _validate_threshold(req.decision_threshold)
+
     features, evidence = compute_features_for_accounts(req.account_ids)
 
     X = pd.DataFrame([features])[FEATURE_COLS]
     risk_score = float(_state["model"].predict_proba(X)[0, 1])
-    action = "FLAGGED_FOR_HUMAN_REVIEW" if risk_score >= RISK_THRESHOLD else "NOT_FLAGGED"
+    action = "FLAGGED_FOR_HUMAN_REVIEW" if risk_score >= threshold else "NOT_FLAGGED"
 
     note = None
     if not evidence:
@@ -264,3 +322,36 @@ def score_ring(req: ScoreRingRequest):
         anomalous_features=explain_anomalies(features),
         note=note,
     )
+
+
+@app.post("/audit/{cluster_id}/decision")
+def record_decision(cluster_id: str, req: DecisionRequest):
+    if cluster_id not in _state["audit_by_cluster"]:
+        raise HTTPException(status_code=404, detail=f"No flagged cluster with id '{cluster_id}'")
+        
+    allowed_decisions = {"confirmed_fraud", "false_positive", "needs_more_info"}
+    if req.decision not in allowed_decisions:
+        raise HTTPException(status_code=422, detail=f"Decision must be one of {allowed_decisions}")
+        
+    decision_record = {
+        "cluster_id": cluster_id,
+        "decision": req.decision,
+        "reviewer_note": req.reviewer_note,
+        "decided_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Save to file
+    with open(f"{DATA_DIR}/decisions.jsonl", "a") as f:
+        f.write(json.dumps(decision_record) + "\n")
+        
+    # Update in-memory state
+    _state["decisions_by_cluster"][cluster_id].append(decision_record)
+    
+    return {"status": "ok", "decision_recorded": decision_record}
+
+
+@app.get("/audit/{cluster_id}/decisions")
+def get_decisions(cluster_id: str):
+    if cluster_id not in _state["audit_by_cluster"]:
+        raise HTTPException(status_code=404, detail=f"No flagged cluster with id '{cluster_id}'")
+    return _state["decisions_by_cluster"].get(cluster_id, [])

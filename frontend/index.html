@@ -74,6 +74,40 @@
     padding: 14px 0;
   }
   .queue-head { padding: 0 20px 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); }
+  .threshold-control {
+    padding: 10px 20px 14px;
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 6px;
+  }
+  .threshold-control label {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-dim); margin-bottom: 6px;
+  }
+  .threshold-control .threshold-val {
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600;
+    color: var(--amber); min-width: 36px; text-align: right;
+  }
+  .threshold-control input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; border-radius: 2px;
+    background: linear-gradient(to right, var(--teal), var(--amber));
+    outline: none; cursor: pointer;
+  }
+  .threshold-control input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--amber); border: 2px solid var(--bg);
+    box-shadow: 0 0 6px rgba(217,142,59,0.4);
+  }
+  .threshold-control input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--amber); border: 2px solid var(--bg);
+    box-shadow: 0 0 6px rgba(217,142,59,0.4);
+  }
+  .threshold-control .threshold-hint {
+    font-size: 10px; color: var(--text-faint); margin-top: 4px;
+  }
   .case-row {
     padding: 12px 20px;
     border-bottom: 1px solid var(--hairline);
@@ -152,6 +186,28 @@
   #score-result { margin-top: 14px; font-size: 13px; }
   #score-result .err { color: #E27A5E; }
 
+  .decisions-section { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--hairline); }
+  .decision-actions { display: flex; gap: 10px; margin-bottom: 24px; }
+  .btn-decision {
+    background: var(--panel); border: 1px solid var(--hairline); color: var(--text);
+    padding: 8px 16px; border-radius: 4px; font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .btn-decision:hover { background: var(--panel-raised); border-color: var(--text-dim); }
+  .btn-decision.fraud { border-color: #C4432B; color: #C4432B; }
+  .btn-decision.fraud:hover { background: rgba(196, 67, 43, 0.1); }
+  .btn-decision.fp { border-color: var(--teal); color: var(--teal); }
+  .btn-decision.fp:hover { background: rgba(79, 160, 160, 0.1); }
+  .decision-history { list-style: none; padding: 0; margin: 0; }
+  .decision-history li {
+    padding: 12px; background: var(--panel); border-left: 3px solid var(--text-dim);
+    margin-bottom: 8px; font-size: 13px;
+  }
+  .decision-history li.fraud { border-left-color: #C4432B; }
+  .decision-history li.fp { border-left-color: var(--teal); }
+  .decision-history .meta { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; font-family: 'IBM Plex Mono', monospace; }
+  .decision-history .note { font-style: italic; color: var(--text-faint); margin-top: 6px; }
+
   a { color: var(--teal); }
   :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 </style>
@@ -172,6 +228,14 @@
 <main>
   <nav class="queue" id="queue" aria-label="Flagged case queue">
     <div class="queue-head">Flagged clusters, highest risk first</div>
+    <div class="threshold-control">
+      <label for="threshold-slider">
+        Decision threshold
+        <span class="threshold-val" id="threshold-val">0.50</span>
+      </label>
+      <input type="range" id="threshold-slider" min="0" max="1" step="0.01" value="0.50">
+      <div class="threshold-hint">Cases below this threshold are marked NOT_FLAGGED</div>
+    </div>
     <div id="queue-list"></div>
   </nav>
 
@@ -193,7 +257,12 @@ const queueList = document.getElementById('queue-list');
 const detail = document.getElementById('detail');
 
 let cases = [];
+let allCases = [];  // unfiltered copy from API
 let activeId = null;
+
+function getThreshold() {
+  return parseFloat(document.getElementById('threshold-slider').value);
+}
 
 async function fetchJSON(path, opts) {
   const res = await fetch(API_BASE + path, opts);
@@ -209,27 +278,39 @@ async function boot() {
     const health = await fetchJSON('/health');
     statusDot.className = 'status-dot ok';
     statusText.textContent = `connected — ${API_BASE}`;
-    cases = await fetchJSON('/rings?limit=200');
-    caseCount.textContent = cases.length;
-    renderQueue();
+    allCases = await fetchJSON('/rings?limit=200');
+    applyThresholdFilter();
   } catch (e) {
     statusDot.className = 'status-dot err';
     statusText.textContent = `cannot reach API (${e.message}) — set #http://host:port in the URL`;
   }
 }
 
+function applyThresholdFilter() {
+  const threshold = getThreshold();
+  cases = allCases.map(c => ({
+    ...c,
+    action: c.risk_score >= threshold ? 'FLAGGED_FOR_HUMAN_REVIEW' : 'NOT_FLAGGED'
+  }));
+  const flaggedCount = cases.filter(c => c.action === 'FLAGGED_FOR_HUMAN_REVIEW').length;
+  caseCount.textContent = flaggedCount;
+  renderQueue();
+}
+
 function renderQueue() {
   queueList.innerHTML = '';
   cases.forEach(c => {
+    const isFlagged = c.action === 'FLAGGED_FOR_HUMAN_REVIEW';
     const row = document.createElement('div');
     row.className = 'case-row' + (c.cluster_id === activeId ? ' active' : '');
+    if (!isFlagged) row.style.opacity = '0.4';
     row.tabIndex = 0;
     row.setAttribute('role', 'button');
     row.innerHTML = `
       <div class="seal mono">${Math.round(c.risk_score * 100)}</div>
       <div class="case-row-info">
         <div class="case-row-id">${c.cluster_id}</div>
-        <div class="case-row-meta">${c.cluster_size} accounts</div>
+        <div class="case-row-meta">${c.cluster_size} accounts &middot; ${c.action === 'FLAGGED_FOR_HUMAN_REVIEW' ? 'FLAGGED' : 'not flagged'}</div>
       </div>`;
     row.addEventListener('click', () => selectCase(c.cluster_id));
     row.addEventListener('keydown', e => { if (e.key === 'Enter') selectCase(c.cluster_id); });
@@ -242,8 +323,11 @@ async function selectCase(id) {
   renderQueue();
   detail.innerHTML = `<div class="empty-state">Loading case ${id}…</div>`;
   try {
-    const rec = await fetchJSON(`/audit/${encodeURIComponent(id)}`);
-    renderDetail(rec);
+    const [rec, decisions] = await Promise.all([
+      fetchJSON(`/audit/${encodeURIComponent(id)}`),
+      fetchJSON(`/audit/${encodeURIComponent(id)}/decisions`)
+    ]);
+    renderDetail(rec, decisions);
   } catch (e) {
     detail.innerHTML = `<div class="empty-state err">Could not load this case: ${e.message}</div>`;
   }
@@ -303,10 +387,38 @@ function drawEvidenceGraph(record) {
   </svg>`;
 }
 
-function renderDetail(rec) {
+window.submitDecision = async function(clusterId, decisionValue) {
+  const note = prompt(`Enter optional note for decision: ${decisionValue}`);
+  if (note === null) return; // cancelled
+
+  try {
+    await fetchJSON(`/audit/${encodeURIComponent(clusterId)}/decision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision: decisionValue, reviewer_note: note })
+    });
+    // Re-fetch to show new history
+    selectCase(clusterId);
+  } catch (e) {
+    alert(`Failed to record decision: ${e.message}`);
+  }
+};
+
+function renderDetail(rec, decisions) {
   const evList = (rec.shared_entity_evidence || []).map(ev => `
     <li><span class="sig">${ev.signal}</span> — ${ev.accounts_sharing.length} accounts share <span class="eid">${ev.entity_id}</span></li>
   `).join('') || '<li>No shared device/instrument/address found — flagged on behavioral signal alone.</li>';
+
+  const historyHtml = decisions.length ? `<ul class="decision-history">` + decisions.map(d => {
+    let cls = '';
+    if (d.decision === 'confirmed_fraud') cls = 'fraud';
+    if (d.decision === 'false_positive') cls = 'fp';
+    const dateStr = new Date(d.decided_at).toLocaleString();
+    return `<li class="${cls}">
+      <div class="meta">${dateStr} &middot; <strong>${d.decision}</strong></div>
+      ${d.reviewer_note ? `<div class="note">"${d.reviewer_note}"</div>` : ''}
+    </li>`;
+  }).join('') + `</ul>` : '<div style="color:var(--text-faint);font-size:13px;font-style:italic;">No decisions recorded yet.</div>';
 
   detail.innerHTML = `
     <div class="case-header">
@@ -328,6 +440,17 @@ function renderDetail(rec) {
 
     <div class="section-label">Flagged accounts (${rec.member_account_ids.length})</div>
     <div class="chip-row">${rec.member_account_ids.map(a => `<span class="chip">${a}</span>`).join('')}</div>
+
+    <div class="decisions-section">
+      <div class="section-label" style="margin-top:0;">Record Decision</div>
+      <div class="decision-actions">
+        <button class="btn-decision fraud" onclick="submitDecision('${rec.cluster_id}', 'confirmed_fraud')">Confirmed fraud</button>
+        <button class="btn-decision fp" onclick="submitDecision('${rec.cluster_id}', 'false_positive')">False positive</button>
+        <button class="btn-decision" onclick="submitDecision('${rec.cluster_id}', 'needs_more_info')">Needs more info</button>
+      </div>
+      <div class="section-label">Decision History</div>
+      ${historyHtml}
+    </div>
   `;
 }
 
@@ -357,7 +480,7 @@ document.getElementById('score-btn').addEventListener('click', async () => {
     const result = await fetchJSON('/score-ring', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account_ids: ids }),
+      body: JSON.stringify({ account_ids: ids, decision_threshold: getThreshold() }),
     });
     resultBox.innerHTML = `
       <table class="ledger">
@@ -371,6 +494,14 @@ document.getElementById('score-btn').addEventListener('click', async () => {
     resultBox.innerHTML = `<span class="err">${e.message}</span>`;
   }
   btn.disabled = false;
+});
+
+// --- Threshold slider wiring ---
+const thresholdSlider = document.getElementById('threshold-slider');
+const thresholdVal = document.getElementById('threshold-val');
+thresholdSlider.addEventListener('input', () => {
+  thresholdVal.textContent = parseFloat(thresholdSlider.value).toFixed(2);
+  applyThresholdFilter();
 });
 
 boot();

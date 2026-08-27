@@ -12,7 +12,7 @@ import os
 import shutil
 
 from pipeline.config import DATA_DIR
-from pipeline import generate_dataset, build_graph, hard_link_detection, louvain_detection, gbm_scorer, audit_layer
+from pipeline import generate_dataset, build_graph, hard_link_detection, louvain_detection, gbm_scorer, anomaly_layer, audit_layer
 
 
 def main():
@@ -35,8 +35,14 @@ def main():
     print("\n" + "=" * 60, "\nSTAGE 5: GBM ring scorer + held-out eval\n" + "=" * 60)
     model, cluster_features, metrics = gbm_scorer.main()
 
+    print("\n" + "=" * 60, "\nSTAGE 5b: Unsupervised anomaly detection\n" + "=" * 60)
+    iso_model, combined_flags, eval_stats = anomaly_layer.main(
+        gbm_model=model, cluster_features=cluster_features
+    )
+
     print("\n" + "=" * 60, "\nSTAGE 6: Explainability + audit trail\n" + "=" * 60)
-    audit_layer.main(model=model, cluster_features=cluster_features)
+    audit_layer.main(model=model, cluster_features=cluster_features,
+                     combined_flags=combined_flags)
 
     print("\n" + "=" * 60)
     print("PIPELINE COMPLETE.")

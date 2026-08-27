@@ -33,6 +33,7 @@ LOUVAIN_RESOLUTION = 1.0
 TEST_FRACTION = 0.35
 POSITIVE_LABEL_THRESHOLD = 0.5
 RISK_THRESHOLD = 0.5
+ANOMALY_CONTAMINATION = 0.1  # IsolationForest: expected fraction of anomalies
 
 FEATURE_COLS = ["size", "density", "avg_edge_weight", "account_age_std_days",
                  "txn_velocity_per_day", "chargeback_rate", "avg_txn_amount"]

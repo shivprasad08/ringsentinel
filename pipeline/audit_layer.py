@@ -19,12 +19,22 @@ import pandas as pd
 from .config import DATA_DIR, FEATURE_COLS, RISK_THRESHOLD
 
 
-def build_audit(model, cluster_features, devices, instruments, addresses, threshold=RISK_THRESHOLD):
+def build_audit(model, cluster_features, devices, instruments, addresses,
+                 threshold=RISK_THRESHOLD, combined_flags=None):
     X_all = cluster_features[FEATURE_COLS]
     proba_all = model.predict_proba(X_all)[:, 1]
     cf = cluster_features.copy()
     cf["risk_score"] = proba_all
-    cf["final_flag"] = (proba_all >= threshold).astype(int)
+
+    if combined_flags is not None:
+        # Anomaly layer ran — flag anything either method caught, and
+        # remember WHICH method(s), so the case file can say so honestly.
+        cf = cf.merge(combined_flags[["cluster_id", "flag_reason"]], on="cluster_id", how="left")
+        cf["flag_reason"] = cf["flag_reason"].fillna("NONE")
+        cf["final_flag"] = (cf["flag_reason"] != "NONE").astype(int)
+    else:
+        cf["flag_reason"] = pd.Series(["GBM" if p >= threshold else "NONE" for p in proba_all], index=cf.index)
+        cf["final_flag"] = (proba_all >= threshold).astype(int)
 
     baselines = cf[FEATURE_COLS].mean()
 
@@ -39,6 +49,12 @@ def build_audit(model, cluster_features, devices, instruments, addresses, thresh
     device_map = shared_entity_map(devices, "device_id")
     instr_map = shared_entity_map(instruments, "instrument_id")
     addr_map = shared_entity_map(addresses, "address_id")
+
+    method_labels = {
+        "GBM": "louvain_soft_link -> gbm_ring_scorer",
+        "ANOMALY": "louvain_soft_link -> anomaly_detection (isolation_forest)",
+        "BOTH": "louvain_soft_link -> gbm_ring_scorer + anomaly_detection",
+    }
 
     records = []
     for _, row in cf.iterrows():
@@ -72,7 +88,7 @@ def build_audit(model, cluster_features, devices, instruments, addresses, thresh
             "shared_entity_evidence": evidence,
             "feature_snapshot": {f: round(float(row[f]), 4) for f in FEATURE_COLS},
             "anomalous_features": anomalous,
-            "detection_method": "louvain_soft_link -> gbm_ring_scorer",
+            "detection_method": method_labels.get(row["flag_reason"], "louvain_soft_link -> gbm_ring_scorer"),
             "action": "FLAGGED_FOR_HUMAN_REVIEW",
             "model_version": "gbm_v1_xgboost",
         })
@@ -99,7 +115,7 @@ def write_top_cases_report(audit_records, path, top_n=5):
         f.write("\n".join(lines))
 
 
-def main(model=None, cluster_features=None, data_dir=DATA_DIR):
+def main(model=None, cluster_features=None, data_dir=DATA_DIR, combined_flags=None):
     import pickle
     if model is None:
         with open(f"{data_dir}/gbm_model.pkl", "rb") as f:
@@ -112,12 +128,18 @@ def main(model=None, cluster_features=None, data_dir=DATA_DIR):
         txns = pd.read_csv(f"{data_dir}/transactions.csv", parse_dates=["timestamp"])
         labels = pd.read_csv(f"{data_dir}/labels_HELD_OUT.csv")
         cluster_features = attach_labels(build_cluster_features(flags, accounts, txns), labels)
+    if combined_flags is None:
+        try:
+            combined_flags = pd.read_csv(f"{data_dir}/combined_flags.csv")
+        except FileNotFoundError:
+            combined_flags = None  # anomaly layer didn't run — GBM-only audit, still valid
 
     devices = pd.read_csv(f"{data_dir}/devices.csv")
     instruments = pd.read_csv(f"{data_dir}/payment_instruments.csv")
     addresses = pd.read_csv(f"{data_dir}/addresses.csv")
 
-    audit_records, scored_clusters = build_audit(model, cluster_features, devices, instruments, addresses)
+    audit_records, scored_clusters = build_audit(model, cluster_features, devices, instruments, addresses,
+                                                   combined_flags=combined_flags)
     print(f"Clusters flagged for human review: {len(audit_records)} "
           f"({sum(r['cluster_size'] for r in audit_records)} accounts)")
 
