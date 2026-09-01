@@ -44,6 +44,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from pipeline.llm_narrative import generate_narrative
+
 DATA_DIR = os.environ.get("RINGSENTINEL_DATA_DIR", "data")
 RISK_THRESHOLD = 0.5
 
@@ -149,6 +151,8 @@ class RingSummary(BaseModel):
     risk_score: float
     cluster_size: int
     action: str
+    latest_decision: Optional[str] = None
+    detection_method_short: str
 
 
 class ScoreRingResponse(BaseModel):
@@ -248,6 +252,18 @@ def explain_anomalies(features: dict) -> List[str]:
     return out
 
 
+def detection_method_short(detection_method: str) -> str:
+    has_anomaly = "anomaly_detection" in detection_method
+    has_gbm = "gbm_ring_scorer" in detection_method
+    if has_anomaly and has_gbm:
+        return "GBM + Anomaly"
+    if has_gbm:
+        return "GBM"
+    if has_anomaly:
+        return "Anomaly"
+    return detection_method
+
+
 # ------------------------------------------------------------------
 # Endpoints
 # ------------------------------------------------------------------
@@ -278,12 +294,18 @@ def list_rings(
 
     out = []
     for r in records:
+        cluster_id = r["cluster_id"]
+        decisions = _state["decisions_by_cluster"].get(cluster_id)
+        latest_decision = decisions[-1]["decision"] if decisions else None
+        audit_record = _state["audit_by_cluster"][cluster_id]
         action = "FLAGGED_FOR_HUMAN_REVIEW" if r["risk_score"] >= threshold else "NOT_FLAGGED"
         out.append(RingSummary(
-            cluster_id=r["cluster_id"],
+            cluster_id=cluster_id,
             risk_score=r["risk_score"],
             cluster_size=r["cluster_size"],
             action=action,
+            latest_decision=latest_decision,
+            detection_method_short=detection_method_short(audit_record["detection_method"]),
         ))
     return out
 
@@ -294,6 +316,14 @@ def get_audit(cluster_id: str):
     if record is None:
         raise HTTPException(status_code=404, detail=f"No flagged cluster with id '{cluster_id}'")
     return record
+
+
+@app.get("/audit/{cluster_id}/narrative")
+def get_narrative(cluster_id: str):
+    record = _state["audit_by_cluster"].get(cluster_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"No flagged cluster with id '{cluster_id}'")
+    return {"cluster_id": cluster_id, "narrative": generate_narrative(record)}
 
 
 @app.post("/score-ring", response_model=ScoreRingResponse)

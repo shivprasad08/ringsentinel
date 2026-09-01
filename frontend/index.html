@@ -18,6 +18,7 @@
     --amber: #D98E3B;
     --amber-dim: #6B5029;
     --teal: #4FA0A0;
+    --danger: #C4432B;
     --danger-bg: #2A1D15;
   }
   * { box-sizing: border-box; }
@@ -108,6 +109,16 @@
   .threshold-control .threshold-hint {
     font-size: 10px; color: var(--text-faint); margin-top: 4px;
   }
+  .queue-search {
+    padding: 0 20px 12px;
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 6px;
+  }
+  .queue-search input {
+    width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--hairline);
+    border-radius: 4px; padding: 8px 10px; font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+  }
+  .queue-search input:focus { outline: none; border-color: var(--amber-dim); }
   .case-row {
     padding: 12px 20px;
     border-bottom: 1px solid var(--hairline);
@@ -128,7 +139,17 @@
   }
   .case-row-info { min-width: 0; }
   .case-row-id { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .case-row-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .case-row-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .queue-badge,
+  .decision-pill {
+    display: inline-flex; align-items: center; height: 18px; border-radius: 3px;
+    padding: 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; line-height: 1;
+    border: 1px solid var(--hairline); color: var(--text-dim);
+  }
+  .queue-badge { color: var(--amber); border-color: var(--amber-dim); }
+  .decision-pill.confirmed { color: var(--danger); border-color: var(--danger); background: rgba(196, 67, 43, 0.08); }
+  .decision-pill.false-positive { color: var(--teal); border-color: var(--teal); background: rgba(79, 160, 160, 0.08); }
+  .decision-pill.needs-info { color: var(--amber); border-color: var(--amber-dim); background: rgba(217, 142, 59, 0.08); }
 
   .detail { padding: 28px 32px; overflow-y: auto; display: flex; flex-direction: column; }
   .empty-state { color: var(--text-dim); font-size: 14px; text-align: center; margin: auto; }
@@ -149,6 +170,10 @@
     font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 3px 9px;
     border-radius: 3px; border: 1px solid var(--amber-dim); letter-spacing: 0.03em;
   }
+  .method-badge {
+    display: inline-block; color: var(--teal); border-color: var(--teal);
+    background: rgba(79, 160, 160, 0.08); margin-left: 6px;
+  }
 
   .section-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); margin: 28px 0 12px; }
   .ledger { width: 100%; border-collapse: collapse; font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
@@ -164,6 +189,13 @@
   }
   .evidence-list .sig { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
   .evidence-list .eid { color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+  .ai-narrative {
+    padding: 10px 14px; background: var(--panel); border: 1px solid var(--hairline);
+    border-radius: 4px; font-size: 13px; line-height: 1.55;
+  }
+  .ai-narrative.loading,
+  .ai-narrative.fallback { color: var(--text-dim); font-style: italic; }
+  .ai-narrative.fallback { border-color: var(--amber-dim); }
 
   #graph-wrap { background: var(--panel); border: 1px solid var(--hairline); border-radius: 6px; padding: 16px; }
   .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
@@ -194,7 +226,7 @@
     font-size: 12px; cursor: pointer; transition: all 0.15s;
   }
   .btn-decision:hover { background: var(--panel-raised); border-color: var(--text-dim); }
-  .btn-decision.fraud { border-color: #C4432B; color: #C4432B; }
+  .btn-decision.fraud { border-color: var(--danger); color: var(--danger); }
   .btn-decision.fraud:hover { background: rgba(196, 67, 43, 0.1); }
   .btn-decision.fp { border-color: var(--teal); color: var(--teal); }
   .btn-decision.fp:hover { background: rgba(79, 160, 160, 0.1); }
@@ -203,7 +235,7 @@
     padding: 12px; background: var(--panel); border-left: 3px solid var(--text-dim);
     margin-bottom: 8px; font-size: 13px;
   }
-  .decision-history li.fraud { border-left-color: #C4432B; }
+  .decision-history li.fraud { border-left-color: var(--danger); }
   .decision-history li.fp { border-left-color: var(--teal); }
   .decision-history .meta { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; font-family: 'IBM Plex Mono', monospace; }
   .decision-history .note { font-style: italic; color: var(--text-faint); margin-top: 6px; }
@@ -228,6 +260,9 @@
 <main>
   <nav class="queue" id="queue" aria-label="Flagged case queue">
     <div class="queue-head">Flagged clusters, highest risk first</div>
+    <div class="queue-search">
+      <input type="search" id="case-search" placeholder="Search cluster ID" aria-label="Search cluster ID">
+    </div>
     <div class="threshold-control">
       <label for="threshold-slider">
         Decision threshold
@@ -255,6 +290,7 @@ const statusText = document.getElementById('status-text');
 const caseCount = document.getElementById('case-count');
 const queueList = document.getElementById('queue-list');
 const detail = document.getElementById('detail');
+const caseSearch = document.getElementById('case-search');
 
 let cases = [];
 let allCases = [];  // unfiltered copy from API
@@ -262,6 +298,32 @@ let activeId = null;
 
 function getThreshold() {
   return parseFloat(document.getElementById('threshold-slider').value);
+}
+
+function getSearchQuery() {
+  return caseSearch.value.trim().toLowerCase();
+}
+
+function decisionPill(decision) {
+  if (decision === 'confirmed_fraud') {
+    return '<span class="decision-pill confirmed">Confirmed</span>';
+  }
+  if (decision === 'false_positive') {
+    return '<span class="decision-pill false-positive">False positive</span>';
+  }
+  if (decision === 'needs_more_info') {
+    return '<span class="decision-pill needs-info">Needs info</span>';
+  }
+  return '';
+}
+
+function detectionMethodLabel(method) {
+  const hasAnomaly = method.includes('anomaly_detection');
+  const hasGbm = method.includes('gbm_ring_scorer');
+  if (hasAnomaly && hasGbm) return 'GBM + Anomaly Detection';
+  if (hasGbm) return 'GBM';
+  if (hasAnomaly) return 'Anomaly Detection';
+  return method.replaceAll('_', ' ');
 }
 
 async function fetchJSON(path, opts) {
@@ -288,10 +350,13 @@ async function boot() {
 
 function applyThresholdFilter() {
   const threshold = getThreshold();
-  cases = allCases.map(c => ({
-    ...c,
-    action: c.risk_score >= threshold ? 'FLAGGED_FOR_HUMAN_REVIEW' : 'NOT_FLAGGED'
-  }));
+  const query = getSearchQuery();
+  cases = allCases
+    .filter(c => c.cluster_id.toLowerCase().includes(query))
+    .map(c => ({
+      ...c,
+      action: c.risk_score >= threshold ? 'FLAGGED_FOR_HUMAN_REVIEW' : 'NOT_FLAGGED'
+    }));
   const flaggedCount = cases.filter(c => c.action === 'FLAGGED_FOR_HUMAN_REVIEW').length;
   caseCount.textContent = flaggedCount;
   renderQueue();
@@ -310,7 +375,12 @@ function renderQueue() {
       <div class="seal mono">${Math.round(c.risk_score * 100)}</div>
       <div class="case-row-info">
         <div class="case-row-id">${c.cluster_id}</div>
-        <div class="case-row-meta">${c.cluster_size} accounts &middot; ${c.action === 'FLAGGED_FOR_HUMAN_REVIEW' ? 'FLAGGED' : 'not flagged'}</div>
+        <div class="case-row-meta">
+          <span>${c.cluster_size} accounts</span>
+          <span>${c.action === 'FLAGGED_FOR_HUMAN_REVIEW' ? 'FLAGGED' : 'not flagged'}</span>
+          <span class="queue-badge">${c.detection_method_short}</span>
+          ${decisionPill(c.latest_decision)}
+        </div>
       </div>`;
     row.addEventListener('click', () => selectCase(c.cluster_id));
     row.addEventListener('keydown', e => { if (e.key === 'Enter') selectCase(c.cluster_id); });
@@ -392,17 +462,39 @@ window.submitDecision = async function(clusterId, decisionValue) {
   if (note === null) return; // cancelled
 
   try {
-    await fetchJSON(`/audit/${encodeURIComponent(clusterId)}/decision`, {
+    const result = await fetchJSON(`/audit/${encodeURIComponent(clusterId)}/decision`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ decision: decisionValue, reviewer_note: note })
     });
-    // Re-fetch to show new history
+    allCases = allCases.map(c => c.cluster_id === clusterId ? {
+      ...c,
+      latest_decision: result.decision_recorded.decision
+    } : c);
+    applyThresholdFilter();
     selectCase(clusterId);
   } catch (e) {
     alert(`Failed to record decision: ${e.message}`);
   }
 };
+
+async function loadNarrative(clusterId) {
+  const box = document.getElementById('ai-narrative');
+  if (!box) return;
+
+  try {
+    const result = await fetchJSON(`/audit/${encodeURIComponent(clusterId)}/narrative`);
+    if (activeId !== clusterId) return;
+
+    const narrative = result.narrative || '[Narrative unavailable: empty response.]';
+    box.textContent = narrative;
+    box.className = narrative.startsWith('[Narrative') ? 'ai-narrative fallback' : 'ai-narrative';
+  } catch (e) {
+    if (activeId !== clusterId) return;
+    box.textContent = `[Narrative unavailable: ${e.message}.]`;
+    box.className = 'ai-narrative fallback';
+  }
+}
 
 function renderDetail(rec, decisions) {
   const evList = (rec.shared_entity_evidence || []).map(ev => `
@@ -426,6 +518,7 @@ function renderDetail(rec, decisions) {
       <div class="case-title">
         <h2>${rec.cluster_id}</h2>
         <span class="action-badge">${rec.action}</span>
+        <span class="action-badge method-badge">Detected via: ${detectionMethodLabel(rec.detection_method)}</span>
       </div>
     </div>
 
@@ -434,6 +527,9 @@ function renderDetail(rec, decisions) {
 
     <div class="section-label">Evidence</div>
     <ul class="evidence-list">${evList}</ul>
+
+    <div class="section-label">AI Case Summary</div>
+    <div id="ai-narrative" class="ai-narrative loading">Generating summary...</div>
 
     <div class="section-label">Evidence graph — diamonds are shared infrastructure, dots are accounts (teal = linked)</div>
     <div id="graph-wrap">${drawEvidenceGraph(rec)}</div>
@@ -452,6 +548,8 @@ function renderDetail(rec, decisions) {
       ${historyHtml}
     </div>
   `;
+
+  loadNarrative(rec.cluster_id);
 }
 
 // --- Live /score-ring tester ---
@@ -503,6 +601,7 @@ thresholdSlider.addEventListener('input', () => {
   thresholdVal.textContent = parseFloat(thresholdSlider.value).toFixed(2);
   applyThresholdFilter();
 });
+caseSearch.addEventListener('input', applyThresholdFilter);
 
 boot();
 </script>
