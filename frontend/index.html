@@ -63,7 +63,7 @@
   .status-line { display: flex; align-items: center; gap: 18px; font-size: 13px; color: var(--text-dim); }
   .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); display: inline-block; margin-right: 6px; }
   .status-dot.ok { background: var(--teal); box-shadow: 0 0 6px var(--teal); }
-  .status-dot.err { background: #C4432B; box-shadow: 0 0 6px #C4432B; }
+  .status-dot.err { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
   .eyebrow { color: var(--amber); font-weight: 600; }
 
   main { flex: 1; display: grid; grid-template-columns: 340px 1fr; min-height: 0; }
@@ -110,7 +110,7 @@
     font-size: 10px; color: var(--text-faint); margin-top: 4px;
   }
   .queue-search {
-    padding: 0 20px 12px;
+    padding: 10px 20px 14px;
     border-bottom: 1px solid var(--hairline);
     margin-bottom: 6px;
   }
@@ -126,7 +126,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    transition: background 0.12s ease;
+    transition: background-color 0.12s ease, opacity 0.12s ease;
   }
   .case-row:hover { background: var(--panel); }
   .case-row.active { background: var(--panel-raised); border-left: 3px solid var(--amber); padding-left: 17px; }
@@ -135,8 +135,9 @@
     border: 1.5px dashed var(--amber-dim);
     display: flex; align-items: center; justify-content: center;
     font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600;
-    color: var(--amber); flex-shrink: 0;
+    color: var(--amber); flex-shrink: 0; transition: transform 0.12s ease;
   }
+  .case-row:hover .seal { transform: scale(1.05); }
   .case-row-info { min-width: 0; }
   .case-row-id { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .case-row-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -154,6 +155,8 @@
   .detail { padding: 28px 32px; overflow-y: auto; display: flex; flex-direction: column; }
   .empty-state { color: var(--text-dim); font-size: 14px; text-align: center; margin: auto; }
   .empty-state .big { font-family: 'Barlow Condensed', sans-serif; font-size: 20px; color: var(--text); display: block; margin-bottom: 8px; }
+  .empty-icon { width: 56px; height: 56px; color: var(--amber); margin: 0 auto 16px; opacity: 0.82; }
+  .empty-state.err .empty-icon { color: var(--danger); }
 
   .case-header { display: flex; align-items: center; gap: 20px; margin-bottom: 24px; }
   .seal-lg {
@@ -197,6 +200,31 @@
   .ai-narrative.fallback { color: var(--text-dim); font-style: italic; }
   .ai-narrative.fallback { border-color: var(--amber-dim); }
 
+  .skeleton { animation: pulse 1.2s ease-in-out infinite; }
+  .skeleton-row {
+    padding: 12px 20px; border-bottom: 1px solid var(--hairline);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .skeleton-circle {
+    width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+    background: var(--panel-raised); border: 1px solid var(--hairline);
+  }
+  .skeleton-lines { flex: 1; min-width: 0; }
+  .skeleton-line {
+    height: 10px; border-radius: 3px; background: var(--panel-raised);
+    border: 1px solid var(--hairline); margin-bottom: 8px;
+  }
+  .skeleton-line.short { width: 42%; }
+  .skeleton-line.medium { width: 64%; }
+  .skeleton-line.long { width: 88%; }
+  .detail-skeleton { width: min(680px, 100%); }
+  .detail-skeleton .case-header { margin-bottom: 28px; }
+  .skeleton-seal-lg { width: 76px; height: 76px; border-radius: 50%; background: var(--panel); border: 2px dashed var(--amber-dim); flex-shrink: 0; }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.7; }
+  }
+
   #graph-wrap { background: var(--panel); border: 1px solid var(--hairline); border-radius: 6px; padding: 16px; }
   .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
   .chip { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-dim); border: 1px solid var(--hairline); border-radius: 3px; padding: 3px 8px; }
@@ -223,8 +251,9 @@
   .btn-decision {
     background: var(--panel); border: 1px solid var(--hairline); color: var(--text);
     padding: 8px 16px; border-radius: 4px; font-family: 'IBM Plex Mono', monospace;
-    font-size: 12px; cursor: pointer; transition: all 0.15s;
+    font-size: 12px; cursor: pointer; transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.08s ease;
   }
+  .btn-decision:active { transform: scale(0.97); }
   .btn-decision:hover { background: var(--panel-raised); border-color: var(--text-dim); }
   .btn-decision.fraud { border-color: var(--danger); color: var(--danger); }
   .btn-decision.fraud:hover { background: rgba(196, 67, 43, 0.1); }
@@ -242,6 +271,33 @@
 
   a { color: var(--teal); }
   :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+  #toast-stack {
+    position: fixed; right: 20px; bottom: 20px; z-index: 10;
+    display: flex; flex-direction: column; gap: 10px; width: min(340px, calc(100vw - 40px));
+  }
+  .toast {
+    display: flex; align-items: flex-start; gap: 10px; background: var(--panel-raised);
+    border: 1px solid var(--hairline); border-left: 3px solid var(--amber);
+    border-radius: 4px; padding: 12px 14px; color: var(--text); font-size: 13px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+    animation: toast-in 0.18s ease-out;
+  }
+  .toast.success { border-left-color: var(--teal); }
+  .toast.info { border-left-color: var(--amber); }
+  .toast.error { border-left-color: var(--danger); }
+  .toast-icon { font-family: 'IBM Plex Mono', monospace; color: var(--amber); flex-shrink: 0; }
+  .toast.success .toast-icon { color: var(--teal); }
+  .toast.error .toast-icon { color: var(--danger); }
+  .toast.fade-out { animation: toast-out 0.18s ease-in forwards; }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(18px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes toast-out {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(18px); }
+  }
 </style>
 </head>
 <body>
@@ -276,11 +332,16 @@
 
   <section class="detail" id="detail">
     <div class="empty-state">
+      <svg class="empty-icon" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="23" cy="20" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M 30 27 L 38 35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
       <span class="big">No case selected</span>
       Choose a flagged cluster from the queue to review its evidence.
     </div>
   </section>
 </main>
+<div id="toast-stack" aria-live="polite" aria-atomic="true"></div>
 
 <script>
 const API_BASE = window.location.hash.slice(1) || 'http://127.0.0.1:8000';
@@ -291,10 +352,31 @@ const caseCount = document.getElementById('case-count');
 const queueList = document.getElementById('queue-list');
 const detail = document.getElementById('detail');
 const caseSearch = document.getElementById('case-search');
+const toastStack = document.getElementById('toast-stack');
 
 let cases = [];
 let allCases = [];  // unfiltered copy from API
 let activeId = null;
+let shownNarratives = new Set();  // track which case narratives have been typed
+
+function showToast(message, type = 'info') {
+  const icons = { success: '✓', info: 'ⓘ', error: '✕' };
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `<span class="toast-icon">${icons[type] || '•'}</span><span>${message}</span>`;
+  toastStack.appendChild(toast);
+
+  const dismissDelay = setTimeout(() => {
+    toast.classList.add('fade-out');
+    setTimeout(() => toast.remove(), 180);
+  }, 3000);
+
+  toast.addEventListener('click', () => {
+    clearTimeout(dismissDelay);
+    toast.classList.add('fade-out');
+    setTimeout(() => toast.remove(), 180);
+  });
+}
 
 function getThreshold() {
   return parseFloat(document.getElementById('threshold-slider').value);
@@ -345,6 +427,16 @@ async function boot() {
   } catch (e) {
     statusDot.className = 'status-dot err';
     statusText.textContent = `cannot reach API (${e.message}) — set #http://host:port in the URL`;
+    detail.innerHTML = `<div class="empty-state err">
+      <svg class="empty-icon" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="28" cy="28" r="24" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="28" y1="20" x2="28" y2="32" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="28" cy="38" r="1.5" fill="currentColor"/>
+      </svg>
+      <span class="big">API unavailable</span>
+      Cannot reach ${API_BASE}. Set a different API URL using #http://host:port in the URL.
+    </div>`;
+    renderQueueSkeletons();
   }
 }
 
@@ -391,7 +483,7 @@ function renderQueue() {
 async function selectCase(id) {
   activeId = id;
   renderQueue();
-  detail.innerHTML = `<div class="empty-state">Loading case ${id}…</div>`;
+  detail.innerHTML = renderCaseDetailSkeleton();
   try {
     const [rec, decisions] = await Promise.all([
       fetchJSON(`/audit/${encodeURIComponent(id)}`),
@@ -399,7 +491,15 @@ async function selectCase(id) {
     ]);
     renderDetail(rec, decisions);
   } catch (e) {
-    detail.innerHTML = `<div class="empty-state err">Could not load this case: ${e.message}</div>`;
+    detail.innerHTML = `<div class="empty-state err">
+      <svg class="empty-icon" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="28" cy="28" r="24" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="28" y1="20" x2="28" y2="32" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="28" cy="38" r="1.5" fill="currentColor"/>
+      </svg>
+      <span class="big">Could not load this case</span>
+      ${e.message}
+    </div>`;
   }
 }
 
@@ -409,6 +509,40 @@ function featureLedgerRows(snapshot, anomalous) {
     const isAnom = anomFeatures.has(k);
     return `<tr class="${isAnom ? 'anom' : ''}"><td>${k}</td><td>${typeof v === 'number' ? v.toFixed(3) : v}</td></tr>`;
   }).join('');
+}
+
+function renderQueueSkeletons() {
+  queueList.innerHTML = '';
+  for (let i = 0; i < 5; i++) {
+    const row = document.createElement('div');
+    row.className = 'skeleton-row skeleton';
+    row.innerHTML = `
+      <div class="skeleton-circle"></div>
+      <div class="skeleton-lines">
+        <div class="skeleton-line long"></div>
+        <div class="skeleton-line medium"></div>
+      </div>`;
+    queueList.appendChild(row);
+  }
+}
+
+function renderCaseDetailSkeleton() {
+  return `
+    <div class="detail-skeleton">
+      <div class="case-header">
+        <div class="skeleton-seal-lg skeleton"></div>
+        <div style="flex:1;">
+          <div class="skeleton-line" style="width:280px;height:28px;margin-bottom:12px;"></div>
+          <div class="skeleton-line" style="width:180px;height:18px;margin-bottom:6px;"></div>
+        </div>
+      </div>
+      <div style="margin-top:24px;">
+        <div class="skeleton-line" style="width:200px;height:14px;margin-bottom:12px;"></div>
+        <div class="skeleton-line"></div>
+        <div class="skeleton-line medium"></div>
+      </div>
+    </div>
+  `;
 }
 
 function drawEvidenceGraph(record) {
@@ -439,21 +573,42 @@ function drawEvidenceGraph(record) {
     });
   });
 
+  // Determine font size based on account density for collision avoidance
+  const accountLabelFontSize = shown.length > 10 ? '9px' : '10px';
+
   let entitySvg = entityNodes.map(e => `
     <g>
       <rect x="${e.x - 9}" y="${e.y - 9}" width="18" height="18" fill="#0E141B" stroke="#D98E3B" stroke-width="1.5"
         transform="rotate(45 ${e.x} ${e.y})"/>
       <title>${e.signal}: ${e.entity_id}</title>
+      <text x="${e.x}" y="${e.y + 16}" font-family="IBM Plex Mono, monospace" font-size="9px" fill="#D98E3B" text-anchor="middle">${e.signal}</text>
     </g>`).join('');
 
-  let accountSvg = accountNodes.map(a => `
+  let accountSvg = accountNodes.map(a => {
+    const shortId = a.id.replace('acc_', '').substring(0, 6);
+    return `
     <g>
       <circle cx="${a.x}" cy="${a.y}" r="5" fill="${a.linked ? '#4FA0A0' : '#26313D'}" stroke="${a.linked ? '#4FA0A0' : '#4B5A69'}"/>
       <title>${a.id}</title>
-    </g>`).join('');
+      <text x="${a.x}" y="${a.y + 16}" font-family="IBM Plex Mono, monospace" font-size="${accountLabelFontSize}" fill="#7E8FA0" text-anchor="middle">${shortId}</text>
+    </g>`;
+  }).join('');
+
+  // Legend in top-right corner
+  const legendX = w - 110;
+  const legendY = 12;
+  const legend = `
+    <g>
+      <rect x="${legendX - 8}" y="${legendY - 8}" width="106" height="28" fill="#0E141B" stroke="#26313D" stroke-width="1" rx="3" opacity="0.95"/>
+      <rect x="${legendX - 2}" y="${legendY}" width="8" height="8" fill="none" stroke="#D98E3B" stroke-width="1.5" transform="rotate(45 ${legendX + 2} ${legendY + 4})"/>
+      <text x="${legendX + 12}" y="${legendY + 5}" font-family="IBM Plex Mono, monospace" font-size="9px" fill="#7E8FA0">Shared</text>
+      <circle cx="${legendX - 2}" cy="${legendY + 18}" r="2.5" fill="#4FA0A0" stroke="#4FA0A0" stroke-width="1"/>
+      <text x="${legendX + 12}" y="${legendY + 20}" font-family="IBM Plex Mono, monospace" font-size="9px" fill="#7E8FA0">Account</text>
+    </g>
+  `;
 
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;" role="img" aria-label="Evidence graph: shared entities connecting flagged accounts">
-    ${edges}${entitySvg}${accountSvg}
+    ${edges}${entitySvg}${accountSvg}${legend}
   </svg>`;
 }
 
@@ -473,8 +628,9 @@ window.submitDecision = async function(clusterId, decisionValue) {
     } : c);
     applyThresholdFilter();
     selectCase(clusterId);
+    showToast(`Decision recorded: ${decisionValue.replace(/_/g, ' ')}`, 'success');
   } catch (e) {
-    alert(`Failed to record decision: ${e.message}`);
+    showToast(`Failed to record decision: ${e.message}`, 'error');
   }
 };
 
@@ -487,12 +643,31 @@ async function loadNarrative(clusterId) {
     if (activeId !== clusterId) return;
 
     const narrative = result.narrative || '[Narrative unavailable: empty response.]';
-    box.textContent = narrative;
-    box.className = narrative.startsWith('[Narrative') ? 'ai-narrative fallback' : 'ai-narrative';
+    const isFallback = narrative.startsWith('[Narrative');
+    box.className = isFallback ? 'ai-narrative fallback' : 'ai-narrative';
+    
+    // Only type the narrative the first time it's shown for this session
+    if (shownNarratives.has(clusterId) || isFallback) {
+      box.textContent = narrative;
+    } else {
+      shownNarratives.add(clusterId);
+      typeNarrative(box, narrative);
+    }
   } catch (e) {
     if (activeId !== clusterId) return;
-    box.textContent = `[Narrative unavailable: ${e.message}.]`;
+    const fallbackText = `[Narrative unavailable: ${e.message}.]`;
+    box.textContent = fallbackText;
     box.className = 'ai-narrative fallback';
+  }
+}
+
+async function typeNarrative(element, text) {
+  element.textContent = '';
+  const delayMs = 15;
+  for (let i = 0; i < text.length; i++) {
+    if (activeId === null) break; // user navigated away
+    element.textContent += text[i];
+    await new Promise(resolve => setTimeout(resolve, delayMs));
   }
 }
 
@@ -598,8 +773,10 @@ document.getElementById('score-btn').addEventListener('click', async () => {
 const thresholdSlider = document.getElementById('threshold-slider');
 const thresholdVal = document.getElementById('threshold-val');
 thresholdSlider.addEventListener('input', () => {
-  thresholdVal.textContent = parseFloat(thresholdSlider.value).toFixed(2);
+  const newVal = parseFloat(thresholdSlider.value).toFixed(2);
+  thresholdVal.textContent = newVal;
   applyThresholdFilter();
+  showToast(`Threshold updated to ${newVal}`, 'info');
 });
 caseSearch.addEventListener('input', applyThresholdFilter);
 
