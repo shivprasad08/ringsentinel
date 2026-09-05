@@ -35,12 +35,14 @@ from dotenv import load_dotenv
 
 load_dotenv()  # reads .env in the current working directory, if present
 
+from .case_retrieval import load_case_pool, find_similar_cases
+
 NARRATIVE_MODEL = "openai/gpt-oss-20b"  # Groq deprecated the llama-3.x chat models; this is their current
                                           # recommended general-purpose model. Swap to "openai/gpt-oss-120b"
                                           # if you want higher quality at the cost of speed.
 
 
-def build_prompt(audit_record: dict) -> str:
+def build_prompt(audit_record: dict, similar_cases: list = None) -> str:
     fs = audit_record["feature_snapshot"]
     evidence = audit_record["shared_entity_evidence"]
     anomalous = audit_record["anomalous_features"]
@@ -52,7 +54,19 @@ def build_prompt(audit_record: dict) -> str:
 
     anomalous_lines = "\n".join(f"- {a}" for a in anomalous) or "- None flagged as statistically unusual"
 
-    return f"""You are writing a one-paragraph case summary for a payment-platform fraud analyst reviewing a flagged cluster of accounts. Be factual and concrete — state only what the data shows, don't speculate about motive or make legal claims (never say "this is fraud", say "this pattern is consistent with coordinated account creation" or similar). 2-3 sentences maximum.
+    if similar_cases:
+        precedent_lines = "\n".join(
+            f"- {c['cluster_id']} ({c['similarity']:.0%} structurally similar): reviewed as '{c['decision']}'"
+            + (f" — reviewer note: \"{c['reviewer_note']}\"" if c["reviewer_note"] else "")
+            for c in similar_cases
+        )
+        precedent_section = f"""
+Similar past reviewed cases (use as light context only — do NOT treat 2-3 examples as statistically conclusive, and do not claim this case's outcome is "likely" based on precedent alone):
+{precedent_lines}"""
+    else:
+        precedent_section = "\nNo similar past-reviewed cases exist yet in the system — this pattern has no reviewed precedent."
+
+    return f"""You are writing a one-paragraph case summary for a payment-platform fraud analyst reviewing a flagged cluster of accounts. Be factual and concrete — state only what the data shows, don't speculate about motive or make legal claims (never say "this is fraud", say "this pattern is consistent with coordinated account creation" or similar). If precedent is mentioned, refer to it briefly as context, not as proof. 2-4 sentences maximum.
 
 Cluster: {audit_record['cluster_id']}
 Size: {audit_record['cluster_size']} accounts
@@ -67,14 +81,28 @@ Feature snapshot:
 
 Anomalous vs. population baseline:
 {anomalous_lines}
+{precedent_section}
 
 Write the summary now, plain text, no markdown formatting, no preamble."""
 
 
-def generate_narrative(audit_record: dict) -> str:
+def generate_narrative(audit_record: dict, data_dir=None) -> str:
     """Returns a narrative string, or a clear fallback message if the
     API key is missing or the call fails — never raises, so a broken
-    LLM call can't take down the case-viewing endpoint."""
+    LLM call can't take down the case-viewing endpoint.
+
+    Retrieves similar past-reviewed cases first (cheap, local, no
+    network call) and grounds the narrative in them if any exist."""
+    from .config import DATA_DIR as _DEFAULT_DATA_DIR
+    data_dir = data_dir or _DEFAULT_DATA_DIR
+
+    try:
+        pool = load_case_pool(data_dir)
+        similar_cases = find_similar_cases(audit_record["feature_snapshot"], pool,
+                                            exclude_cluster_id=audit_record["cluster_id"])
+    except Exception:
+        similar_cases = []  # retrieval is a nice-to-have; never let it block narrative generation
+
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
         return ("[Narrative unavailable: GROQ_API_KEY not set. "
@@ -90,7 +118,7 @@ def generate_narrative(audit_record: dict) -> str:
             reasoning_effort="low",  # this is a short factual summary, not a task that
                                       # needs deep chain-of-thought; keeps more of the
                                       # token budget available for the actual answer
-            messages=[{"role": "user", "content": build_prompt(audit_record)}],
+            messages=[{"role": "user", "content": build_prompt(audit_record, similar_cases)}],
         )
         content = response.choices[0].message.content
         if not content or not content.strip():

@@ -30,7 +30,9 @@ pipeline script) at DATA_DIR below — mount it as a volume in Docker
 rather than baking it into the image, since the dataset/model is a
 separate, regenerable artifact from the service code.
 """
-
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 import json
 import os
 import pickle
