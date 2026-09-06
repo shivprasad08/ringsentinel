@@ -10,8 +10,6 @@ RingSentinel detects coordinated fraud rings — accounts that look independent 
 
 ![RingSentinel Architecture](docs/architecture-diagram.png)
 
-*(Export the diagram from Napkin and save it to `docs/architecture-diagram.png` — this embed renders automatically on GitHub once that file exists.)*
-
 **The pipeline, in words:**
 
 1. **Synthetic Dataset Generator** — accounts, devices, payment instruments, addresses, and transactions, with injected abuse rings at a tunable subtlety level, plus deliberately noisy "coincidental overlap" clusters to stress-test false positives.
