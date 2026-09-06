@@ -8,7 +8,7 @@ RingSentinel detects coordinated fraud rings — accounts that look independent 
 
 ## Architecture
 
-![RingSentinel Architecture](docs/architecture-diagram.png)
+![RingSentinel Architecture](docs/architecture-diagram)
 
 *(Export the diagram from Napkin and save it to `docs/architecture-diagram.png` — this embed renders automatically on GitHub once that file exists.)*
 
